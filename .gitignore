@@ -1,0 +1,8 @@
+# Secrets — never commit real API keys
+Secrets.xcconfig
+
+# Xcode
+xcuserdata/
+*.xcuserstate
+DerivedData/
+.DS_Store
