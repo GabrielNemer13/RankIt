@@ -69,6 +69,18 @@ struct MovieDetailView: View {
                     }
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+
+                    if let myScore {
+                        HStack(spacing: 8) {
+                            Label(String(format: "%.1f", myScore), systemImage: "person.fill")
+                                .foregroundStyle(.tint)
+                            if movie.voteAverage > 0 {
+                                Text(diffText(myScore: myScore, tmdbRating: movie.voteAverage))
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .font(.subheadline)
+                    }
                 }
 
                 if !movie.genres.isEmpty {
@@ -170,6 +182,26 @@ struct MovieDetailView: View {
     }
 
     private var actions: DetailActions { DetailActions.available(for: context) }
+
+    /// This user's `RatingScore` for the movie, computed fresh from its
+    /// tier's current display order -- `nil` for read-only/watchlist
+    /// contexts, which have no ranking to score.
+    private var myScore: Double? {
+        guard let loggedMovie = context.loggedMovie else { return nil }
+        let userID = loggedMovie.userID
+        let tier = loggedMovie.tier
+        let descriptor = FetchDescriptor<LoggedMovie>(predicate: #Predicate<LoggedMovie> { $0.userID == userID })
+        let tierEntries = ((try? modelContext.fetch(descriptor)) ?? [])
+            .filter { $0.tier == tier }
+            .sorted(by: LoggedMovie.isOrderedForDisplay)
+        return RatingScore.scores(forDisplayOrderedTier: tierEntries)[loggedMovie.id]
+    }
+
+    private func diffText(myScore: Double, tmdbRating: Double) -> String {
+        let diff = myScore - tmdbRating
+        let sign = diff >= 0 ? "+" : ""
+        return String(format: "%@%.1f vs TMDb", sign, diff)
+    }
 
     private var removeConfirmationTitle: String {
         switch context {

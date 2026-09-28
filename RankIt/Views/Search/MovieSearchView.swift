@@ -97,6 +97,10 @@ private struct SearchResultsList: View {
             } else {
                 ForEach(viewModel.trendingMovies) { movie in
                     resultRow(for: movie)
+                        .onAppear { viewModel.loadMoreTrendingIfNeeded(currentMovie: movie) }
+                }
+                if viewModel.isLoadingMoreTrending {
+                    loadingRow
                 }
             }
         } header: {
@@ -121,6 +125,10 @@ private struct SearchResultsList: View {
         } else {
             ForEach(viewModel.results) { movie in
                 resultRow(for: movie)
+                    .onAppear { viewModel.loadMoreResultsIfNeeded(currentMovie: movie) }
+            }
+            if viewModel.isLoadingMoreResults {
+                loadingRow
             }
         }
     }

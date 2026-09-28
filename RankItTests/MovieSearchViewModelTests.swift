@@ -49,22 +49,36 @@ final class MovieSearchViewModelTests: XCTestCase {
         var delaysByQuery: [String: UInt64] = [:]
         var resultsByQuery: [String: [Movie]] = [:]
 
-        func searchMovies(query: String) async throws -> [Movie] {
+        func searchMovies(query: String, page: Int) async throws -> MoviePage {
             if let delay = delaysByQuery[query] {
                 try await Task.sleep(nanoseconds: delay)
             }
-            return resultsByQuery[query] ?? []
+            let movies = resultsByQuery[query] ?? []
+            return MoviePage(movies: movies, page: 1, totalPages: 1)
         }
         func movieDetails(id: Int) async throws -> Movie { fatalError("not needed") }
-        func trending() async throws -> [Movie] { [] }
+        func trending(page: Int) async throws -> MoviePage { .empty }
         func officialTrailers(movieID: Int) async throws -> [Trailer] { [] }
     }
 
     private struct TrendingService: MovieCatalogServicing {
-        let movies: [Movie]
-        func searchMovies(query: String) async throws -> [Movie] { [] }
+        let moviesByPage: [Int: [Movie]]
+        let totalPages: Int
+
+        init(movies: [Movie], totalPages: Int = 1) {
+            self.moviesByPage = [1: movies]
+            self.totalPages = totalPages
+        }
+        init(moviesByPage: [Int: [Movie]], totalPages: Int) {
+            self.moviesByPage = moviesByPage
+            self.totalPages = totalPages
+        }
+
+        func searchMovies(query: String, page: Int) async throws -> MoviePage { .empty }
         func movieDetails(id: Int) async throws -> Movie { fatalError("not needed") }
-        func trending() async throws -> [Movie] { movies }
+        func trending(page: Int) async throws -> MoviePage {
+            MoviePage(movies: moviesByPage[page] ?? [], page: page, totalPages: totalPages)
+        }
         func officialTrailers(movieID: Int) async throws -> [Trailer] { [] }
     }
 
@@ -72,16 +86,16 @@ final class MovieSearchViewModelTests: XCTestCase {
         struct Failure: Error, LocalizedError {
             var errorDescription: String? { "Simulated failure" }
         }
-        func searchMovies(query: String) async throws -> [Movie] { throw Failure() }
+        func searchMovies(query: String, page: Int) async throws -> MoviePage { throw Failure() }
         func movieDetails(id: Int) async throws -> Movie { throw Failure() }
-        func trending() async throws -> [Movie] { throw Failure() }
+        func trending(page: Int) async throws -> MoviePage { throw Failure() }
         func officialTrailers(movieID: Int) async throws -> [Trailer] { [] }
     }
 
     private struct MissingKeyService: MovieCatalogServicing {
-        func searchMovies(query: String) async throws -> [Movie] { throw TMDbError.missingAPIKey }
+        func searchMovies(query: String, page: Int) async throws -> MoviePage { throw TMDbError.missingAPIKey }
         func movieDetails(id: Int) async throws -> Movie { throw TMDbError.missingAPIKey }
-        func trending() async throws -> [Movie] { throw TMDbError.missingAPIKey }
+        func trending(page: Int) async throws -> MoviePage { throw TMDbError.missingAPIKey }
         func officialTrailers(movieID: Int) async throws -> [Trailer] { [] }
     }
 
@@ -255,5 +269,90 @@ final class MovieSearchViewModelTests: XCTestCase {
         XCTAssertTrue(viewModel.results.isEmpty)
         XCTAssertNil(viewModel.searchErrorMessage)
         XCTAssertFalse(viewModel.isSearching)
+    }
+
+    // MARK: - New TMDb error cases
+
+    private struct ThrowingService: MovieCatalogServicing {
+        let error: TMDbError
+        func searchMovies(query: String, page: Int) async throws -> MoviePage { throw error }
+        func movieDetails(id: Int) async throws -> Movie { throw error }
+        func trending(page: Int) async throws -> MoviePage { throw error }
+        func officialTrailers(movieID: Int) async throws -> [Trailer] { [] }
+    }
+
+    func test_unauthorizedKey_surfacesFriendlyErrorNotCrash() async {
+        let viewModel = makeViewModel(service: ThrowingService(error: .unauthorized))
+        viewModel.query = "anything"
+
+        await viewModel.search()
+
+        XCTAssertEqual(viewModel.searchErrorMessage, TMDbError.unauthorized.localizedDescription)
+    }
+
+    func test_rateLimited_surfacesFriendlyErrorNotCrash() async {
+        let viewModel = makeViewModel(service: ThrowingService(error: .rateLimited))
+
+        await viewModel.loadTrendingIfNeeded()
+
+        XCTAssertEqual(viewModel.trendingErrorMessage, TMDbError.rateLimited.localizedDescription)
+    }
+
+    // MARK: - Pagination
+
+    func test_loadMoreTrendingIfNeeded_nearEndOfList_appendsNextPage() async {
+        let page1 = [Movie(tmdbID: 1, title: "One", year: 2000), Movie(tmdbID: 2, title: "Two", year: 2000)]
+        let page2 = [Movie(tmdbID: 3, title: "Three", year: 2000)]
+        let service = TrendingService(moviesByPage: [1: page1, 2: page2], totalPages: 2)
+        let viewModel = makeViewModel(service: service)
+
+        await viewModel.loadTrendingIfNeeded()
+        XCTAssertEqual(viewModel.trendingMovies.map(\.tmdbID), [1, 2])
+
+        // Index 1 of 2 is within the last-3-items trigger window.
+        viewModel.loadMoreTrendingIfNeeded(currentMovie: page1[1])
+        // Give the fire-and-forget Task a chance to run.
+        try? await Task.sleep(nanoseconds: 20_000_000)
+
+        XCTAssertEqual(viewModel.trendingMovies.map(\.tmdbID), [1, 2, 3], "scrolling near the end should load and append the next page")
+    }
+
+    func test_loadMoreTrendingIfNeeded_noMorePages_staysPut() async {
+        let page1 = [Movie(tmdbID: 1, title: "One", year: 2000)]
+        let service = TrendingService(movies: page1, totalPages: 1)
+        let viewModel = makeViewModel(service: service)
+
+        await viewModel.loadTrendingIfNeeded()
+        viewModel.loadMoreTrendingIfNeeded(currentMovie: page1[0])
+        try? await Task.sleep(nanoseconds: 20_000_000)
+
+        XCTAssertEqual(viewModel.trendingMovies.map(\.tmdbID), [1], "there's only one page, so nothing should be appended")
+    }
+
+    private struct PagedSearchService: MovieCatalogServicing {
+        let moviesByPage: [Int: [Movie]]
+        let totalPages: Int
+        func searchMovies(query: String, page: Int) async throws -> MoviePage {
+            MoviePage(movies: moviesByPage[page] ?? [], page: page, totalPages: totalPages)
+        }
+        func movieDetails(id: Int) async throws -> Movie { fatalError("not needed") }
+        func trending(page: Int) async throws -> MoviePage { .empty }
+        func officialTrailers(movieID: Int) async throws -> [Trailer] { [] }
+    }
+
+    func test_search_thenLoadMoreResults_appendsSecondPage() async {
+        let page1 = [Movie(tmdbID: 1, title: "One", year: 2000)]
+        let page2 = [Movie(tmdbID: 2, title: "Two", year: 2000)]
+        let service = PagedSearchService(moviesByPage: [1: page1, 2: page2], totalPages: 2)
+        let viewModel = makeViewModel(service: service)
+        viewModel.query = "anything"
+
+        await viewModel.search()
+        XCTAssertEqual(viewModel.results.map(\.tmdbID), [1])
+
+        viewModel.loadMoreResultsIfNeeded(currentMovie: page1[0])
+        try? await Task.sleep(nanoseconds: 20_000_000)
+
+        XCTAssertEqual(viewModel.results.map(\.tmdbID), [1, 2])
     }
 }

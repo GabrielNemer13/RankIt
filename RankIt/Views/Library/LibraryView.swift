@@ -15,6 +15,8 @@ struct LibraryView: View {
 
     @Query private var loggedMovies: [LoggedMovie]
     @Query private var movies: [Movie]
+    @Environment(\.modelContext) private var modelContext
+    @State private var exportURL: URL?
 
     init(userID: UUID, navigationTitle: String = "Library", isOwnLibrary: Bool = true) {
         self.userID = userID
@@ -54,6 +56,7 @@ struct LibraryView: View {
             } else {
                 List {
                     ForEach(sections, id: \.tier) { section in
+                        let scores = RatingScore.scores(forDisplayOrderedTier: section.entries)
                         Section {
                             ForEach(Array(section.entries.enumerated()), id: \.element.id) { index, logged in
                                 let movie = moviesByID[logged.movieID]
@@ -64,10 +67,10 @@ struct LibraryView: View {
                                             context: .forLibraryRow(loggedMovie: logged, isOwnLibrary: isOwnLibrary)
                                         )
                                     } label: {
-                                        LibraryRow(rank: index + 1, movie: movie)
+                                        LibraryRow(rank: index + 1, movie: movie, myScore: scores[logged.id])
                                     }
                                 } else {
-                                    LibraryRow(rank: index + 1, movie: nil)
+                                    LibraryRow(rank: index + 1, movie: nil, myScore: nil)
                                 }
                             }
                         } header: {
@@ -78,15 +81,37 @@ struct LibraryView: View {
             }
         }
         .navigationTitle(navigationTitle)
+        .toolbar {
+            // Read-only followed-user libraries never get an export
+            // action -- exporting someone else's data isn't this
+            // button's job, and the JSON is keyed to the signed-in user's
+            // own rows anyway (see LibraryExporter).
+            if isOwnLibrary && !loggedMovies.isEmpty {
+                ToolbarItem(placement: .topBarTrailing) {
+                    if let exportURL {
+                        ShareLink(item: exportURL) {
+                            Label("Export Library", systemImage: "square.and.arrow.up")
+                        }
+                    } else {
+                        Button {
+                            exportURL = LibraryExporter.exportToTemporaryFile(userID: userID, modelContext: modelContext)
+                        } label: {
+                            Label("Export Library", systemImage: "square.and.arrow.up")
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
 private struct LibraryRow: View {
     let rank: Int
     let movie: Movie?
+    let myScore: Double?
 
     var body: some View {
-        MoviePosterRow(movie: movie) {
+        MoviePosterRow(movie: movie, myScore: myScore) {
             Text("#\(rank)")
                 .font(.headline)
                 .foregroundStyle(.secondary)

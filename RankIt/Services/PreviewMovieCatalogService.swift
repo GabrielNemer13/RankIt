@@ -10,10 +10,12 @@ struct PreviewMovieCatalogService: MovieCatalogServicing {
         self.catalog = catalog
     }
 
-    func searchMovies(query: String) async throws -> [Movie] {
+    func searchMovies(query: String, page: Int = 1) async throws -> MoviePage {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return [] }
-        return catalog.filter { $0.title.localizedCaseInsensitiveContains(trimmed) }
+        guard !trimmed.isEmpty else { return .empty }
+        guard page == 1 else { return MoviePage(movies: [], page: page, totalPages: 1) }
+        let matches = catalog.filter { $0.title.localizedCaseInsensitiveContains(trimmed) }
+        return MoviePage(movies: matches, page: 1, totalPages: 1)
     }
 
     func movieDetails(id: Int) async throws -> Movie {
@@ -23,8 +25,9 @@ struct PreviewMovieCatalogService: MovieCatalogServicing {
         return movie
     }
 
-    func trending() async throws -> [Movie] {
-        catalog
+    func trending(page: Int = 1) async throws -> MoviePage {
+        guard page == 1 else { return MoviePage(movies: [], page: page, totalPages: 1) }
+        return MoviePage(movies: catalog, page: 1, totalPages: 1)
     }
 
     func officialTrailers(movieID: Int) async throws -> [Trailer] {
