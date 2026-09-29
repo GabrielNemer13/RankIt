@@ -22,6 +22,7 @@ struct FriendsView: View {
     @State private var searchText = ""
     @State private var showingFollowingList = false
     @State private var showingEditProfile = false
+    @State private var showingAbout = false
 
     init(currentUser: User) {
         self.currentUser = currentUser
@@ -91,12 +92,22 @@ struct FriendsView: View {
                         Label("Edit Profile", systemImage: "person.crop.circle")
                     }
                 }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showingAbout = true
+                    } label: {
+                        Label("About", systemImage: "info.circle")
+                    }
+                }
             }
             .sheet(isPresented: $showingFollowingList) {
                 FollowingListSheet(followedUsers: followedUsers, onUnfollow: toggleFollow)
             }
             .sheet(isPresented: $showingEditProfile) {
                 EditProfileSheet(user: currentUser)
+            }
+            .sheet(isPresented: $showingAbout) {
+                AboutView()
             }
         }
     }

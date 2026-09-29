@@ -82,6 +82,14 @@ private struct DiscoverFeed: View {
                             }
                             .containerRelativeFrame(.vertical)
                             .id(candidate.id)
+                            .onAppear {
+                                viewModel.loadMoreIfNeeded(currentCandidate: candidate)
+                            }
+                        }
+                        if viewModel.isLoadingMore {
+                            ProgressView()
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 80)
                         }
                     }
                     .scrollTargetLayout()
@@ -99,6 +107,8 @@ private struct DiscoverCardView: View {
     let onAction: (DiscoverAction) -> Void
 
     @State private var isPlaying = true
+    @State private var embedFailed = false
+    @Environment(\.openURL) private var openURL
 
     var body: some View {
         ZStack {
@@ -115,9 +125,26 @@ private struct DiscoverCardView: View {
     /// Still scales normally up through the standard sizes.
     private var content: some View {
         ZStack {
-            if let trailer = candidate.trailer {
-                YouTubePlayerView(youtubeKey: trailer.youtubeKey, isPlaying: $isPlaying)
-                    .allowsHitTesting(false)
+            if let trailer = candidate.trailer, !embedFailed {
+                YouTubePlayerView(youtubeKey: trailer.youtubeKey, isPlaying: $isPlaying) {
+                    embedFailed = true
+                }
+                .allowsHitTesting(false)
+            } else if let trailer = candidate.trailer {
+                // The uploader disabled embedding -- rather than a blank
+                // black card, offer a direct link out to YouTube.
+                Rectangle().fill(.black)
+                VStack(spacing: 12) {
+                    Text("This trailer can't be played here")
+                        .foregroundStyle(.white.opacity(0.8))
+                    Button("Open in YouTube") {
+                        if let url = URL(string: "https://www.youtube.com/watch?v=\(trailer.youtubeKey)") {
+                            openURL(url)
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.white)
+                }
             } else {
                 Rectangle().fill(.black)
                 Text("No trailer available")

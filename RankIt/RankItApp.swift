@@ -4,20 +4,10 @@ import SwiftData
 @main
 struct RankItApp: App {
     let modelContainer: ModelContainer = {
-        let schema = Schema([
-            User.self,
-            Movie.self,
-            LoggedMovie.self,
-            ComparisonEvent.self,
-            Watchlist.self,
-            Follow.self,
-            ActivityFeedItem.self,
-            Trailer.self,
-            DiscoverInteraction.self
-        ])
+        let schema = Schema(versionedSchema: SchemaV1.self)
         let configuration = ModelConfiguration(schema: schema)
         do {
-            return try ModelContainer(for: schema, configurations: [configuration])
+            return try ModelContainer(for: schema, migrationPlan: RankItMigrationPlan.self, configurations: [configuration])
         } catch {
             fatalError("Failed to create ModelContainer: \(error)")
         }

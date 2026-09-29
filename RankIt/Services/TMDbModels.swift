@@ -3,7 +3,30 @@ import Foundation
 // MARK: - Wire DTOs (raw TMDb JSON shapes)
 
 struct TMDbPagedResponse<Result: Decodable>: Decodable {
+    let page: Int
+    let totalPages: Int
     let results: [Result]
+
+    enum CodingKeys: String, CodingKey {
+        case page, results
+        case totalPages = "total_pages"
+    }
+}
+
+/// `/configuration`'s `images` block — base URLs and the size buckets
+/// available for each image type. Only poster sizes are used today.
+struct TMDbConfigurationDTO: Decodable {
+    struct Images: Decodable {
+        let secureBaseURL: String
+        let posterSizes: [String]
+
+        enum CodingKeys: String, CodingKey {
+            case secureBaseURL = "secure_base_url"
+            case posterSizes = "poster_sizes"
+        }
+    }
+
+    let images: Images
 }
 
 struct TMDbMovieSummaryDTO: Decodable {
@@ -97,9 +120,12 @@ enum TMDbMapping {
         return Int(releaseDate.prefix(4)) ?? 0
     }
 
+    /// Uses whatever base URL/poster size `TMDbImageConfig` currently has
+    /// cached — the hardcoded default before the first successful
+    /// `/configuration` fetch, or the live values after.
     static func posterURL(_ path: String?) -> URL? {
         guard let path, !path.isEmpty else { return nil }
-        return TMDbConfig.imageBaseURL.appendingPathComponent(path)
+        return TMDbImageConfig.shared.posterURL(forPath: path)
     }
 }
 

@@ -8,10 +8,12 @@ final class MovieSearchViewModel {
     var query: String = ""
     private(set) var results: [Movie] = []
     private(set) var isSearching = false
+    private(set) var isLoadingMoreResults = false
     private(set) var searchErrorMessage: String?
 
     private(set) var trendingMovies: [Movie] = []
     private(set) var isLoadingTrending = false
+    private(set) var isLoadingMoreTrending = false
     private(set) var trendingErrorMessage: String?
 
     private(set) var recentSearches: [String] = []
@@ -27,6 +29,11 @@ final class MovieSearchViewModel {
     /// `Task` cancellation, so a slower, now-stale response can never
     /// clobber a faster, newer one no matter how the two overlap.
     private var searchGeneration = 0
+
+    private var nextResultsPage = 1
+    private var hasMoreResultsPages = true
+    private var nextTrendingPage = 1
+    private var hasMoreTrendingPages = true
 
     init(
         catalogService: any MovieCatalogServicing,
@@ -69,12 +76,41 @@ final class MovieSearchViewModel {
     private func loadTrending() async {
         isLoadingTrending = true
         trendingErrorMessage = nil
+        nextTrendingPage = 1
+        hasMoreTrendingPages = true
         defer { isLoadingTrending = false }
         do {
-            trendingMovies = try await catalogService.trending()
+            let page = try await catalogService.trending(page: nextTrendingPage)
+            trendingMovies = page.movies
+            hasMoreTrendingPages = page.hasMorePages
+            nextTrendingPage = page.page + 1
         } catch {
             trendingMovies = []
             trendingErrorMessage = error.localizedDescription
+        }
+    }
+
+    /// Called by the view as the user scrolls near the end of the trending
+    /// list (empty-query state).
+    func loadMoreTrendingIfNeeded(currentMovie movie: Movie) {
+        guard hasMoreTrendingPages, !isLoadingTrending, !isLoadingMoreTrending else { return }
+        guard let index = trendingMovies.firstIndex(where: { $0.tmdbID == movie.tmdbID }) else { return }
+        guard index >= trendingMovies.count - 3 else { return }
+        Task { await loadMoreTrending() }
+    }
+
+    private func loadMoreTrending() async {
+        guard hasMoreTrendingPages, !isLoadingTrending, !isLoadingMoreTrending else { return }
+        isLoadingMoreTrending = true
+        defer { isLoadingMoreTrending = false }
+        do {
+            let page = try await catalogService.trending(page: nextTrendingPage)
+            let existingIDs = Set(trendingMovies.map(\.tmdbID))
+            trendingMovies += page.movies.filter { !existingIDs.contains($0.tmdbID) }
+            hasMoreTrendingPages = page.hasMorePages
+            nextTrendingPage = page.page + 1
+        } catch {
+            hasMoreTrendingPages = false
         }
     }
 
@@ -86,6 +122,8 @@ final class MovieSearchViewModel {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         searchGeneration += 1
         let generation = searchGeneration
+        nextResultsPage = 1
+        hasMoreResultsPages = true
 
         guard !trimmed.isEmpty else {
             results = []
@@ -110,9 +148,11 @@ final class MovieSearchViewModel {
             if generation == searchGeneration { isSearching = false }
         }
         do {
-            let movies = try await catalogService.searchMovies(query: trimmed)
+            let page = try await catalogService.searchMovies(query: trimmed, page: nextResultsPage)
             guard generation == searchGeneration else { return } // superseded
-            results = movies
+            results = page.movies
+            hasMoreResultsPages = page.hasMorePages
+            nextResultsPage = page.page + 1
         } catch {
             guard generation == searchGeneration else { return } // superseded
             results = []
@@ -122,6 +162,34 @@ final class MovieSearchViewModel {
 
     func retrySearch() async {
         await search()
+    }
+
+    /// Called by the view as the user scrolls near the end of the search
+    /// results list.
+    func loadMoreResultsIfNeeded(currentMovie movie: Movie) {
+        guard hasMoreResultsPages, !isSearching, !isLoadingMoreResults else { return }
+        guard let index = results.firstIndex(where: { $0.tmdbID == movie.tmdbID }) else { return }
+        guard index >= results.count - 3 else { return }
+        let generation = searchGeneration
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        Task { await loadMoreResults(query: trimmed, generation: generation) }
+    }
+
+    private func loadMoreResults(query trimmed: String, generation: Int) async {
+        guard hasMoreResultsPages, !isSearching, !isLoadingMoreResults else { return }
+        isLoadingMoreResults = true
+        defer { isLoadingMoreResults = false }
+        do {
+            let page = try await catalogService.searchMovies(query: trimmed, page: nextResultsPage)
+            guard generation == searchGeneration else { return } // query changed mid-fetch
+            let existingIDs = Set(results.map(\.tmdbID))
+            results += page.movies.filter { !existingIDs.contains($0.tmdbID) }
+            hasMoreResultsPages = page.hasMorePages
+            nextResultsPage = page.page + 1
+        } catch {
+            hasMoreResultsPages = false
+        }
     }
 
     /// Adds the current query to recent searches. Only called when the user

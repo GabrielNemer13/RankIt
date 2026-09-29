@@ -14,12 +14,15 @@ struct DiscoverCandidate: Identifiable, Equatable {
 final class DiscoverViewModel {
     private(set) var candidates: [DiscoverCandidate] = []
     private(set) var isLoading = false
+    private(set) var isLoadingMore = false
     private(set) var errorMessage: String?
     var selectedGenre: String?
 
     private let catalogService: any MovieCatalogServicing
     private let currentUser: User
     private let modelContext: ModelContext
+    private var nextPage = 1
+    private var hasMorePages = true
 
     init(catalogService: any MovieCatalogServicing, currentUser: User, modelContext: ModelContext) {
         self.catalogService = catalogService
@@ -45,16 +48,50 @@ final class DiscoverViewModel {
     func load() async {
         isLoading = true
         errorMessage = nil
+        candidates = []
+        nextPage = 1
+        hasMorePages = true
         defer { isLoading = false }
+        await loadPage()
+    }
 
+    /// Called by the view as the user scrolls near the end of the feed.
+    /// `candidate` is the row currently coming into view; this only fetches
+    /// more once the user is within the last few cards, so a single scroll
+    /// gesture doesn't trigger several redundant loads.
+    func loadMoreIfNeeded(currentCandidate candidate: DiscoverCandidate) {
+        guard hasMorePages, !isLoading, !isLoadingMore else { return }
+        guard let index = visibleCandidates.firstIndex(where: { $0.id == candidate.id }) else { return }
+        guard index >= visibleCandidates.count - 3 else { return }
+        Task { await loadMore() }
+    }
+
+    private func loadMore() async {
+        guard hasMorePages, !isLoading, !isLoadingMore else { return }
+        isLoadingMore = true
+        defer { isLoadingMore = false }
+        await loadPage()
+    }
+
+    /// Fetches `nextPage`, builds candidates for it, and appends them —
+    /// used by both the initial load and subsequent "load more" calls.
+    /// On failure: if this was the very first page (`candidates` still
+    /// empty), surface `errorMessage` for the empty/error state; on a later
+    /// page, fail silently and just stop paginating, so a transient error
+    /// deep into the feed doesn't blow away everything already shown.
+    private func loadPage() async {
         do {
             // TODO: once trending is exhausted (or as a richer fallback),
             // broaden to another TMDb source — e.g. `discover/movie`
             // weighted toward genres the user ranks highly — and replace
             // this raw trending order with a real recommendation ranking.
-            let trending = try await catalogService.trending()
+            let page = try await catalogService.trending(page: nextPage)
+            hasMorePages = page.hasMorePages
+            nextPage = page.page + 1
+
             let loggedMovieIDs = Set(fetchLoggedMovieIDs())
-            let unseen = trending.filter { !loggedMovieIDs.contains($0.tmdbID) }
+            let existingIDs = Set(candidates.map(\.movie.tmdbID))
+            let unseen = page.movies.filter { !loggedMovieIDs.contains($0.tmdbID) && !existingIDs.contains($0.tmdbID) }
 
             var built: [DiscoverCandidate] = []
             for movie in unseen {
@@ -62,9 +99,12 @@ final class DiscoverViewModel {
                 let trailer = trailers.first(where: { $0.type == .trailer }) ?? trailers.first
                 built.append(DiscoverCandidate(movie: movie, trailer: trailer))
             }
-            candidates = built
+            candidates += built
         } catch {
-            errorMessage = error.localizedDescription
+            hasMorePages = false
+            if candidates.isEmpty {
+                errorMessage = error.localizedDescription
+            }
         }
     }
 

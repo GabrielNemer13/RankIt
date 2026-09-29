@@ -13,5 +13,4 @@ enum TMDbConfig {
     }
 
     static let baseURL = URL(string: "https://api.themoviedb.org/3")!
-    static let imageBaseURL = URL(string: "https://image.tmdb.org/t/p/w500")!
 }
