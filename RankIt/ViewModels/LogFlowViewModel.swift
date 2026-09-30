@@ -46,6 +46,13 @@ final class LogFlowViewModel {
     private(set) var isComplete: Bool
     private(set) var canUndo: Bool
     private(set) var isSaved = false
+    /// Set by `save()` alongside `isSaved` -- the `LoggedMovie` the
+    /// confirmation screen should navigate to (see `ComparisonView`'s
+    /// auto-dismiss-to-detail behavior). Same row for both `.newLog` and
+    /// `.reRank`; just exposed as a stored property instead of only a
+    /// `save()` return value, since the confirmation UI renders well after
+    /// the call that produced it.
+    private(set) var savedLoggedMovie: LoggedMovie?
 
     private let mode: Mode
     private let engine: RankingEngine<RankableEntry>
@@ -201,6 +208,7 @@ final class LogFlowViewModel {
             modelContext.insert(ActivityFeedItem(userID: currentUser.id, type: .logged, refID: newLog.id))
             try? modelContext.save()
             isSaved = true
+            savedLoggedMovie = newLog
             return newLog
 
         case .reRank(let existingLog, _):
@@ -213,6 +221,7 @@ final class LogFlowViewModel {
             existingLog.watchedDate = .now
             try? modelContext.save()
             isSaved = true
+            savedLoggedMovie = existingLog
             return existingLog
         }
     }

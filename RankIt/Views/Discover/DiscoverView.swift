@@ -56,6 +56,16 @@ private struct GenreFilterMenu: View {
 private struct DiscoverFeed: View {
     @Bindable var viewModel: DiscoverViewModel
     @Binding var scrollPosition: Int?
+    /// Drives the "Rank it" sheet. Kept separate from `rankedCandidate`
+    /// below so the sheet's content always knows which movie it's for,
+    /// independent of whether that rank actually gets saved.
+    @State private var rankingCandidate: DiscoverCandidate?
+    /// Set right before `rankingCandidate` is cleared, only if the flow
+    /// actually saved a rank (as opposed to the user cancelling out) --
+    /// consumed in `onDismiss` once the sheet has visually closed, so
+    /// `DiscoverViewModel.markRanked` never runs concurrently with the
+    /// dismiss animation.
+    @State private var rankedCandidate: DiscoverCandidate?
 
     var body: some View {
         Group {
@@ -77,9 +87,12 @@ private struct DiscoverFeed: View {
                 ScrollView(.vertical) {
                     LazyVStack(spacing: 0) {
                         ForEach(viewModel.visibleCandidates) { candidate in
-                            DiscoverCardView(candidate: candidate) { action in
-                                viewModel.record(action: action, for: candidate)
-                            }
+                            DiscoverCardView(
+                                candidate: candidate,
+                                isWatchlisted: viewModel.watchlistedMovieIDs.contains(candidate.movie.tmdbID),
+                                onToggleWatchlist: { viewModel.toggleWatchlist(for: candidate) },
+                                onRankIt: { rankingCandidate = candidate }
+                            )
                             .containerRelativeFrame(.vertical)
                             .id(candidate.id)
                             .onAppear {
@@ -99,12 +112,36 @@ private struct DiscoverFeed: View {
                 .ignoresSafeArea(edges: .bottom)
             }
         }
+        // A sheet (rather than pushing onto Discover's own NavigationStack)
+        // means cancelling is just the standard swipe-to-dismiss, and
+        // finishing -- either way -- always drops the user back on this
+        // exact feed, scroll position untouched, with no extra plumbing.
+        .sheet(item: $rankingCandidate, onDismiss: {
+            if let rankedCandidate {
+                viewModel.markRanked(rankedCandidate)
+                self.rankedCandidate = nil
+            }
+        }) { candidate in
+            NavigationStack {
+                TierPickerView(movie: candidate.movie) { didSave in
+                    if didSave { rankedCandidate = candidate }
+                    rankingCandidate = nil
+                }
+            }
+        }
     }
 }
 
 private struct DiscoverCardView: View {
     let candidate: DiscoverCandidate
-    let onAction: (DiscoverAction) -> Void
+    /// Sourced from `DiscoverViewModel.watchlistedMovieIDs`, not local
+    /// `@State` -- this card's underlying view can be recreated by the
+    /// `LazyVStack` as the user scrolls away and back, so the filled/empty
+    /// state has to live in the view model to render correctly on that
+    /// first reappearance rather than resetting to empty.
+    let isWatchlisted: Bool
+    let onToggleWatchlist: () -> Void
+    let onRankIt: () -> Void
 
     @State private var isPlaying = true
     @State private var embedFailed = false
@@ -179,16 +216,24 @@ private struct DiscoverCardView: View {
                         }
                         Spacer()
                         VStack(spacing: 22) {
-                            actionButton(systemImage: "bookmark.fill", label: "Watchlist") {
-                                onAction(.watchlisted)
-                            }
+                            actionButton(systemImage: "star.fill", label: "Rank it", action: onRankIt)
+                            watchlistButton
                         }
                     }
                     .padding()
                     // Extra clearance so title/actions clear the floating tab
                     // bar — the video background still extends full-bleed
                     // behind it (see .ignoresSafeArea on the containing feed).
-                    .padding(.bottom, 110)
+                    // 170 rather than a smaller value: with two stacked
+                    // action buttons instead of one, the lower button
+                    // (Watchlist) landed in a band close to the bottom edge
+                    // where simulator taps were reliably swallowed before
+                    // they reached any gesture recognizer at all (not even
+                    // the card's own play/pause tap) -- consistent with the
+                    // same near-edge system-gesture interference documented
+                    // for the floating tab bar elsewhere in this app. This
+                    // much clearance keeps both buttons well clear of it.
+                    .padding(.bottom, 170)
                 }
             }
         }
@@ -204,6 +249,30 @@ private struct DiscoverCardView: View {
                     .font(.caption2)
             }
             .foregroundStyle(.white)
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+    }
+
+    /// Its own view (rather than another `actionButton` call) because it
+    /// needs two things a plain icon button doesn't: a symbol that swaps
+    /// between empty/filled based on `isWatchlisted` -- driven by the view
+    /// model, so it's correct even if this card is a freshly-recreated
+    /// instance from `LazyVStack` scroll recycling -- and a bounce tied to
+    /// that same value, so the tap reads as acknowledged rather than a
+    /// silent state flip.
+    private var watchlistButton: some View {
+        Button(action: onToggleWatchlist) {
+            VStack(spacing: 4) {
+                Image(systemName: isWatchlisted ? "bookmark.fill" : "bookmark")
+                    .font(.title)
+                    .symbolEffect(.bounce, value: isWatchlisted)
+                Text("Watchlist")
+                    .font(.caption2)
+            }
+            .foregroundStyle(.white)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }

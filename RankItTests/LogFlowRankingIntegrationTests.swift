@@ -191,6 +191,37 @@ final class LogFlowRankingIntegrationTests: XCTestCase {
         XCTAssertEqual(tier.map(\.rankPosition), [0, 1, 2, 3], "rankPosition should stay dense after repeated middle insertions")
     }
 
+    // MARK: - savedLoggedMovie (drives ComparisonView's auto-navigate-to-detail)
+
+    func test_save_newLog_exposesSavedLoggedMovie() {
+        let movie = Movie(tmdbID: 200, title: "A", year: 2000)
+        modelContext.insert(movie)
+        let viewModel = LogFlowViewModel(movie: movie, tier: .loved, currentUser: currentUser, modelContext: modelContext)
+
+        let saved = viewModel.save()
+
+        XCTAssertNotNil(saved)
+        XCTAssertTrue(viewModel.savedLoggedMovie === saved, "savedLoggedMovie should be the exact row save() returned")
+    }
+
+    func test_save_reRank_exposesSavedLoggedMovieAsTheExistingRow() {
+        let movie = Movie(tmdbID: 201, title: "A", year: 2000)
+        let loggedA = log(movie, tier: .loved, choices: [])
+
+        let viewModel = moveToTier(loggedA, newTier: .liked, choices: [])
+        viewModel.save()
+
+        XCTAssertTrue(viewModel.savedLoggedMovie === loggedA, "re-ranking should expose the same (mutated) row, not a new one")
+    }
+
+    func test_savedLoggedMovie_staysNilBeforeSaveIsCalled() {
+        let movie = Movie(tmdbID: 202, title: "A", year: 2000)
+        modelContext.insert(movie)
+        let viewModel = LogFlowViewModel(movie: movie, tier: .loved, currentUser: currentUser, modelContext: modelContext)
+
+        XCTAssertNil(viewModel.savedLoggedMovie)
+    }
+
     // MARK: - Ties survive a nearby non-tied insertion
 
     func test_tieGroupStaysIntactAndOrderedByWatchedDate_afterNearbyInsertion() {

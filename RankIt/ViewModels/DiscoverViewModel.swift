@@ -16,6 +16,11 @@ final class DiscoverViewModel {
     private(set) var isLoading = false
     private(set) var isLoadingMore = false
     private(set) var errorMessage: String?
+    /// Movie IDs currently on the signed-in user's watchlist, refreshed on
+    /// every `load()` so a card renders already-filled on first appearance
+    /// -- including re-entering the tab -- rather than starting empty and
+    /// only filling in after a tap.
+    private(set) var watchlistedMovieIDs: Set<Int> = []
     var selectedGenre: String?
 
     private let catalogService: any MovieCatalogServicing
@@ -51,6 +56,7 @@ final class DiscoverViewModel {
         candidates = []
         nextPage = 1
         hasMorePages = true
+        watchlistedMovieIDs = fetchWatchlistedMovieIDs()
         defer { isLoading = false }
         await loadPage()
     }
@@ -108,33 +114,78 @@ final class DiscoverViewModel {
         }
     }
 
-    /// Records the interaction and, for `.watchlisted`, adds the movie to
-    /// the user's Watchlist (deduped — repeated likes of the same movie
-    /// shouldn't create duplicate Watchlist rows).
-    func record(action: DiscoverAction, for candidate: DiscoverCandidate) {
-        let interaction = DiscoverInteraction(userID: currentUser.id, movieID: candidate.movie.tmdbID, action: action)
-        modelContext.insert(interaction)
-
-        if action == .watchlisted, !isAlreadyOnWatchlist(movieID: candidate.movie.tmdbID) {
-            // Candidates from trending() are never persisted on their own —
-            // cache the Movie now so Watchlist (and anything else joining by
-            // tmdbID) can actually resolve it later, instead of just storing
-            // a dangling movieID.
-            upsertMovie(candidate.movie)
-            let watchlistEntry = Watchlist(userID: currentUser.id, movieID: candidate.movie.tmdbID)
-            modelContext.insert(watchlistEntry)
-            modelContext.insert(ActivityFeedItem(userID: currentUser.id, type: .watchlisted, refID: watchlistEntry.id))
+    /// Adds or removes the candidate's movie from the Watchlist, toggling
+    /// on the current state in `watchlistedMovieIDs` -- a second tap while
+    /// already watchlisted removes it, rather than being a no-op. That
+    /// matches the button's own filled/empty affordance (it looks like a
+    /// toggle, so it should behave like one) and gives the user a way to
+    /// undo an accidental tap without leaving Discover.
+    ///
+    /// Only the *addition* records a `DiscoverInteraction` -- removing here
+    /// is corrective/undo behavior, not a new discovery signal worth
+    /// logging, matching how deleting a Library/Watchlist row elsewhere in
+    /// the app doesn't log an activity event either.
+    func toggleWatchlist(for candidate: DiscoverCandidate) {
+        let movieID = candidate.movie.tmdbID
+        if watchlistedMovieIDs.contains(movieID) {
+            removeFromWatchlist(movieID: movieID)
+            watchlistedMovieIDs.remove(movieID)
+        } else {
+            addToWatchlist(candidate: candidate)
+            watchlistedMovieIDs.insert(movieID)
         }
-
         try? modelContext.save()
     }
 
-    private func isAlreadyOnWatchlist(movieID: Int) -> Bool {
+    /// Called once a movie has been ranked via the "Rank it" sheet's
+    /// tier-picker/comparison flow (the `LogFlowViewModel` save itself
+    /// already wrote the `LoggedMovie` -- this is Discover's own
+    /// bookkeeping on top of that). Removes it from the feed immediately,
+    /// rather than waiting for the next `load()` to apply the
+    /// already-logged filter, and logs a `.logged` `DiscoverInteraction`
+    /// for parity with how Watchlist/Skip are recorded.
+    ///
+    /// Also clears any Watchlist entry: once a movie has a real rank in
+    /// the Library, leaving it in "want to watch" would be stale --
+    /// Watchlist is for movies not yet seen.
+    func markRanked(_ candidate: DiscoverCandidate) {
+        candidates.removeAll { $0.id == candidate.id }
+        let movieID = candidate.movie.tmdbID
+        modelContext.insert(DiscoverInteraction(userID: currentUser.id, movieID: movieID, action: .logged))
+        if watchlistedMovieIDs.contains(movieID) {
+            removeFromWatchlist(movieID: movieID)
+            watchlistedMovieIDs.remove(movieID)
+        }
+        try? modelContext.save()
+    }
+
+    private func addToWatchlist(candidate: DiscoverCandidate) {
+        let interaction = DiscoverInteraction(userID: currentUser.id, movieID: candidate.movie.tmdbID, action: .watchlisted)
+        modelContext.insert(interaction)
+        // Candidates from trending() are never persisted on their own —
+        // cache the Movie now so Watchlist (and anything else joining by
+        // tmdbID) can actually resolve it later, instead of just storing
+        // a dangling movieID.
+        upsertMovie(candidate.movie)
+        let watchlistEntry = Watchlist(userID: currentUser.id, movieID: candidate.movie.tmdbID)
+        modelContext.insert(watchlistEntry)
+        modelContext.insert(ActivityFeedItem(userID: currentUser.id, type: .watchlisted, refID: watchlistEntry.id))
+    }
+
+    private func removeFromWatchlist(movieID: Int) {
         let userID = currentUser.id
         let descriptor = FetchDescriptor<Watchlist>(
             predicate: #Predicate<Watchlist> { $0.userID == userID && $0.movieID == movieID }
         )
-        return !((try? modelContext.fetch(descriptor)) ?? []).isEmpty
+        for entry in (try? modelContext.fetch(descriptor)) ?? [] {
+            modelContext.delete(entry)
+        }
+    }
+
+    private func fetchWatchlistedMovieIDs() -> Set<Int> {
+        let userID = currentUser.id
+        let descriptor = FetchDescriptor<Watchlist>(predicate: #Predicate<Watchlist> { $0.userID == userID })
+        return Set(((try? modelContext.fetch(descriptor)) ?? []).map(\.movieID))
     }
 
     @discardableResult

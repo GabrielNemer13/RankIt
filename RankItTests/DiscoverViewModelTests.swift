@@ -157,4 +157,85 @@ final class DiscoverViewModelTests: XCTestCase {
 
         XCTAssertEqual(viewModel.visibleCandidates.map(\.id), [2])
     }
+
+    // MARK: - Watchlist button state
+
+    func test_load_populatesWatchlistedMovieIDs_fromExistingWatchlistRows() async {
+        let movie = Movie(tmdbID: 1, title: "Already saved", year: 2000)
+        modelContext.insert(movie)
+        modelContext.insert(Watchlist(userID: currentUser.id, movieID: 1))
+        let service = PagedTrendingService(moviesByPage: [1: [movie]], totalPages: 1)
+        let viewModel = makeViewModel(service: service)
+
+        await viewModel.loadIfNeeded()
+
+        XCTAssertTrue(viewModel.watchlistedMovieIDs.contains(1), "a card for an already-watchlisted movie must render filled on first appearance, not just after a tap")
+    }
+
+    func test_toggleWatchlist_addsMovieAndRecordsInteraction() async {
+        let movie = Movie(tmdbID: 1, title: "One", year: 2000)
+        let service = PagedTrendingService(moviesByPage: [1: [movie]], totalPages: 1)
+        let viewModel = makeViewModel(service: service)
+        await viewModel.loadIfNeeded()
+        let candidate = viewModel.candidates[0]
+
+        viewModel.toggleWatchlist(for: candidate)
+
+        XCTAssertTrue(viewModel.watchlistedMovieIDs.contains(1))
+        let watchlistRows = (try? modelContext.fetch(FetchDescriptor<Watchlist>())) ?? []
+        XCTAssertEqual(watchlistRows.map(\.movieID), [1])
+        let interactions = (try? modelContext.fetch(FetchDescriptor<DiscoverInteraction>())) ?? []
+        XCTAssertEqual(interactions.map(\.action), [.watchlisted])
+    }
+
+    func test_toggleWatchlist_secondTap_removesFromWatchlistWithoutLoggingAnotherInteraction() async {
+        let movie = Movie(tmdbID: 1, title: "One", year: 2000)
+        let service = PagedTrendingService(moviesByPage: [1: [movie]], totalPages: 1)
+        let viewModel = makeViewModel(service: service)
+        await viewModel.loadIfNeeded()
+        let candidate = viewModel.candidates[0]
+
+        viewModel.toggleWatchlist(for: candidate) // add
+        viewModel.toggleWatchlist(for: candidate) // remove
+
+        XCTAssertFalse(viewModel.watchlistedMovieIDs.contains(1))
+        let watchlistRows = (try? modelContext.fetch(FetchDescriptor<Watchlist>())) ?? []
+        XCTAssertTrue(watchlistRows.isEmpty, "a second tap should remove the Watchlist row, not create a duplicate or leave it in place")
+        let interactions = (try? modelContext.fetch(FetchDescriptor<DiscoverInteraction>())) ?? []
+        XCTAssertEqual(interactions.count, 1, "removing shouldn't log a second interaction -- only the add is a discovery signal")
+    }
+
+    // MARK: - Rank it
+
+    func test_markRanked_removesCandidateFromCurrentFeedAndLogsInteraction() async {
+        let movieA = Movie(tmdbID: 1, title: "One", year: 2000)
+        let movieB = Movie(tmdbID: 2, title: "Two", year: 2000)
+        let service = PagedTrendingService(moviesByPage: [1: [movieA, movieB]], totalPages: 1)
+        let viewModel = makeViewModel(service: service)
+        await viewModel.loadIfNeeded()
+        let rankedCandidate = viewModel.candidates[0]
+
+        viewModel.markRanked(rankedCandidate)
+
+        XCTAssertEqual(viewModel.candidates.map(\.id), [2], "a ranked movie should disappear from the feed immediately, not just on the next load")
+        let interactions = (try? modelContext.fetch(FetchDescriptor<DiscoverInteraction>())) ?? []
+        XCTAssertEqual(interactions.map { ($0.movieID, $0.action) }.map { $0.0 }, [1])
+        XCTAssertEqual(interactions.map(\.action), [.logged])
+    }
+
+    func test_markRanked_clearsAnExistingWatchlistEntry() async {
+        let movie = Movie(tmdbID: 1, title: "One", year: 2000)
+        let service = PagedTrendingService(moviesByPage: [1: [movie]], totalPages: 1)
+        let viewModel = makeViewModel(service: service)
+        await viewModel.loadIfNeeded()
+        let candidate = viewModel.candidates[0]
+        viewModel.toggleWatchlist(for: candidate)
+        XCTAssertTrue(viewModel.watchlistedMovieIDs.contains(1))
+
+        viewModel.markRanked(candidate)
+
+        XCTAssertFalse(viewModel.watchlistedMovieIDs.contains(1), "a ranked movie has a real score in the Library now -- it shouldn't still sit in 'want to watch'")
+        let watchlistRows = (try? modelContext.fetch(FetchDescriptor<Watchlist>())) ?? []
+        XCTAssertTrue(watchlistRows.isEmpty)
+    }
 }

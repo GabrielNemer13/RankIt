@@ -49,6 +49,7 @@
 		B5F3CEF3F9BFA480953E3F6B /* User.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFF27630C4BFA37D8A38F07E /* User.swift */; };
 		B8DE4E4E05094439F02007FA /* LoggedMovieDisplayOrderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14315BAB0F3DD2BC688BF9EA /* LoggedMovieDisplayOrderTests.swift */; };
 		B963F1427A3DAD3CB563E832 /* ComparisonHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FC1168F209D2CA72DC6ED94 /* ComparisonHistoryView.swift */; };
+		BD1BF84FDD1B241229665807 /* YouTubeEmbedFailureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F612306BAA48EDB6208D122 /* YouTubeEmbedFailureTests.swift */; };
 		BED94721B0BC70DD676E4458 /* RootTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2816A23030C1F89A8285149 /* RootTabView.swift */; };
 		BEF1FE77ADB1002BEA570772 /* DetailActionsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20D49EA208FC807100BF1F6 /* DetailActionsTests.swift */; };
 		C53431EB2A4F214BD1691D5A /* MovieSearchViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE2F827A1CEA36B6C1C290AE /* MovieSearchViewModel.swift */; };
@@ -95,6 +96,7 @@
 		20BA790B6F0BF94F8E612C6E /* RatingScoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RatingScoreTests.swift; sourceTree = "<group>"; };
 		2697EE530903DE9030C2E2E7 /* MoviePosterRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoviePosterRow.swift; sourceTree = "<group>"; };
 		29176421F4720F9CA061BD14 /* Follow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Follow.swift; sourceTree = "<group>"; };
+		2F612306BAA48EDB6208D122 /* YouTubeEmbedFailureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTubeEmbedFailureTests.swift; sourceTree = "<group>"; };
 		36076BB8AFC9113094381269 /* RankItTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = RankItTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		39B52E191211CC15A6B8C414 /* OnboardingGate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingGate.swift; sourceTree = "<group>"; };
 		3D1D0D5A6D3956F0767534D1 /* ActivityFeedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityFeedView.swift; sourceTree = "<group>"; };
@@ -149,7 +151,7 @@
 		F7173A494E4B5A449F996B39 /* DiscoverViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverViewModel.swift; sourceTree = "<group>"; };
 		F80EE38507FE4ECF92B1C6B5 /* TMDbClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TMDbClient.swift; sourceTree = "<group>"; };
 		FF396440F1334B48201A5E15 /* Trailer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Trailer.swift; sourceTree = "<group>"; };
-		"TEMP_4D5390DE-B8DB-4D45-9C76-BE4C1F0CEFA2" /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
+		"TEMP_72B9CBE7-DF6D-48B2-82AB-13159C9C87F4" /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -335,6 +337,7 @@
 				D3E62F3906EC1DC29419D5B9 /* RecentSearchesStoreTests.swift */,
 				77F76B5161053F346778AB92 /* TMDbClientTests.swift */,
 				55186E18B6307EFEA89CBE19 /* TMDbImageConfigTests.swift */,
+				2F612306BAA48EDB6208D122 /* YouTubeEmbedFailureTests.swift */,
 			);
 			path = RankItTests;
 			sourceTree = "<group>";
@@ -353,10 +356,10 @@
 			path = RankIt;
 			sourceTree = "<group>";
 		};
-		"TEMP_5BEFFDD8-D241-4301-87B6-896D63EDC3DA" /* RankIt */ = {
+		"TEMP_BFC3B59D-00AF-4399-BB13-6979074E1471" /* RankIt */ = {
 			isa = PBXGroup;
 			children = (
-				"TEMP_4D5390DE-B8DB-4D45-9C76-BE4C1F0CEFA2" /* Secrets.xcconfig */,
+				"TEMP_72B9CBE7-DF6D-48B2-82AB-13159C9C87F4" /* Secrets.xcconfig */,
 			);
 			path = RankIt;
 			sourceTree = "<group>";
@@ -516,6 +519,7 @@
 				FC8A27668436152A836C3CBE /* RecentSearchesStoreTests.swift in Sources */,
 				24F94838845BF59D985019C4 /* TMDbClientTests.swift in Sources */,
 				E14D7EF83DB9B365F9F622A7 /* TMDbImageConfigTests.swift in Sources */,
+				BD1BF84FDD1B241229665807 /* YouTubeEmbedFailureTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -532,7 +536,7 @@
 /* Begin XCBuildConfiguration section */
 		1329FE6853591835394E4AAB /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = "TEMP_4D5390DE-B8DB-4D45-9C76-BE4C1F0CEFA2" /* Secrets.xcconfig */;
+			baseConfigurationReference = "TEMP_72B9CBE7-DF6D-48B2-82AB-13159C9C87F4" /* Secrets.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -655,7 +659,7 @@
 		};
 		F7BB5E198F1760B3BD78E0AB /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = "TEMP_4D5390DE-B8DB-4D45-9C76-BE4C1F0CEFA2" /* Secrets.xcconfig */;
+			baseConfigurationReference = "TEMP_72B9CBE7-DF6D-48B2-82AB-13159C9C87F4" /* Secrets.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
